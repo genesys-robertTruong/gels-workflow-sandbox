@@ -38,7 +38,14 @@ concurrency:
 
 jobs:
   move:
-    if: github.event.pull_request.merged == true
+    # Only run for an actual promotion: a merged PR carrying the iec62304 or
+    # functional label. This skips maintenance PRs (which stay in place),
+    # defer PRs, and non-module infra/docs PRs -- none of which move a folder
+    # -- so the job never mints an App token or fails for nothing.
+    if: >
+      github.event.pull_request.merged == true &&
+      (contains(github.event.pull_request.labels.*.name, 'iec62304') ||
+       contains(github.event.pull_request.labels.*.name, 'functional'))
     runs-on: ubuntu-latest
     steps:
       - name: Require the sandbox PAT
