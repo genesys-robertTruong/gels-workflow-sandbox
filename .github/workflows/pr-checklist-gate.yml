@@ -33,6 +33,16 @@ jobs:
             const pr = context.payload.pull_request;
             if (!pr) { core.info('No pull_request in payload; skipping.'); return; }
 
+            // --- Defer PRs are intentionally un-gated --------------------------
+            // Deferring a module is a plain PR from development/<INDEX_NAME> into
+            // deferred/snapshot (see defer-module-cleanup.yml). By design it
+            // carries no review template and needs no checklist, so the gate does
+            // not apply -- otherwise every defer PR would show a spurious failure.
+            if (pr.base && pr.base.ref === 'deferred/snapshot') {
+              core.info('PR targets deferred/snapshot (module deferral); checklist gate not applicable.');
+              return;
+            }
+
             // The four review types and their labels.
             const LABELS = {
               'iec62304':               { color: '0e8a16', description: 'Full IEC 62304 development review' },
