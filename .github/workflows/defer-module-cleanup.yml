@@ -87,7 +87,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           mkdir -p "$(dirname "$DEST")"
           git mv "$SRC" "$DEST"
-          git commit -m "defer: move $MODULE into deferred/ [skip ci]"
+          git commit -m "defer: move $MODULE into deferred/"
           git push origin deferred/snapshot
           echo "Moved $MODULE into deferred/ on deferred/snapshot."
 
@@ -110,7 +110,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm -r "$SRC"
-          git commit -m "defer: remove $MODULE from development/ (deferred) [skip ci]"
+          git commit -m "defer: remove $MODULE from development/ (deferred)"
 
           for attempt in 1 2 3; do
             if git push origin HEAD:main; then

@@ -94,7 +94,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           mkdir -p "$(dirname "$DEST")"
           git mv "$SRC" "$DEST"
-          git commit -m "promote: move $MODULE to $DEST_ROOT/ [skip ci]"
+          git commit -m "promote: move $MODULE to $DEST_ROOT/"
 
           # Retry to survive another PR merging into $BASE_REF in the meantime.
           for attempt in 1 2 3; do

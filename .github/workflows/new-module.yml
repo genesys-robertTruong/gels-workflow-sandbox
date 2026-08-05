@@ -41,6 +41,15 @@ concurrency:
 jobs:
   scaffold:
     runs-on: ubuntu-latest
+    # Skip runs triggered by this workflow's own pushes. Its scaffold /
+    # register / sync-back / resume commits are all authored as
+    # github-actions[bot], so this guard stops the PAT-authenticated sync-back
+    # push from re-running the scaffold. This replaces the old `[skip ci]`
+    # markers, which GitHub also honoured on the *pull_request* events of any
+    # later defer or promotion merge of this branch -- silently suppressing
+    # defer-module-cleanup and module-folder-move. The guard is scoped to this
+    # push-triggered workflow and does not affect those merge events.
+    if: github.event.head_commit.author.name != 'github-actions[bot]'
     steps:
       - name: Checkout development branch
         uses: actions/checkout@v4
@@ -73,9 +82,9 @@ jobs:
           fi
           MODULE="${{ steps.scaffold.outputs.module || steps.restore.outputs.module }}"
           if [ "${{ steps.restore.outputs.restored }}" = "true" ]; then
-            git commit -m "resume: restore module $MODULE from deferred/ [skip ci]"
+            git commit -m "resume: restore module $MODULE from deferred/"
           else
-            git commit -m "scaffold: add module $MODULE files [skip ci]"
+            git commit -m "scaffold: add module $MODULE files"
           fi
           git push origin "HEAD:${{ github.ref_name }}"
 
@@ -86,7 +95,7 @@ jobs:
         run: |
           git checkout -B deferred/snapshot origin/deferred/snapshot
           git rm -r "deferred/AppModules/$MODULE"
-          git commit -m "resume: remove $MODULE from deferred (moved to development/) [skip ci]"
+          git commit -m "resume: remove $MODULE from deferred (moved to development/)"
           git push origin deferred/snapshot
 
       - name: Require the sandbox PAT
@@ -128,7 +137,7 @@ jobs:
               echo "Already registered on main; nothing to push."
               break
             fi
-            git commit -m "register: add module to AppModules.h/.c [skip ci]"
+            git commit -m "register: add module to AppModules.h/.c"
             if git push origin HEAD:main; then
               echo "Registered on main."
               break
@@ -161,5 +170,5 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "register: sync AppModules.h/.c from main [skip ci]"
+          git commit -m "register: sync AppModules.h/.c from main"
           git push origin "HEAD:$BRANCH"
