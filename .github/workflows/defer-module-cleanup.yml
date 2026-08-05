@@ -1,0 +1,133 @@
+name: Defer Module Cleanup
+
+# Implements the "Defer module" path of the GeLS module workflow: to defer
+# <INDEX_NAME>, open a PR directly from its existing development/<INDEX_NAME>
+# branch with base deferred/snapshot and merge it once reviewed -- no manual
+# git mv needed, no checklist gate.
+#
+# Because deferred/snapshot is kept in sync with main (see
+# sync-deferred-snapshot.yml), merging that PR just lands the module's
+# current development/AppModules/<Module> content onto deferred/snapshot
+# unchanged; it does not touch main, and it does not move the module into
+# deferred/ on its own. This workflow does the rest once the PR is merged:
+#
+#   1. git mv development/AppModules/<Module> -> deferred/AppModules/<Module>
+#      directly on deferred/snapshot (no App token needed -- that branch
+#      isn't protected)
+#   2. remove development/AppModules/<Module> from main (needs the GeLS
+#      automation App -- main is protected)
+#
+# SANDBOX VARIANT: uses the GELS_SANDBOX_PAT secret instead of a GitHub App --
+# see module-folder-move.yml for why.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: defer-cleanup-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: >
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'deferred/snapshot' &&
+      startsWith(github.event.pull_request.head.ref, 'development/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout deferred/snapshot
+        uses: actions/checkout@v4
+        with:
+          ref: deferred/snapshot
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Resolve module from head branch
+        id: resolve
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: python .github/scripts/resolve_defer.py "$HEAD_REF"
+
+      - name: Require the sandbox PAT
+        env:
+          SANDBOX_PAT: ${{ secrets.GELS_SANDBOX_PAT }}
+        run: |
+          if [ -z "$SANDBOX_PAT" ]; then
+            echo "::error::GELS_SANDBOX_PAT is not set. This workflow removes" \
+                 "${{ steps.resolve.outputs.module }} from development/ on main, which" \
+                 "requires pushing directly to that protected branch. Add the secret and" \
+                 "put it on the ruleset bypass list, then re-run this job -- nothing has" \
+                 "moved yet."
+            exit 1
+          fi
+
+      - name: Move module into deferred/ on deferred/snapshot
+        env:
+          MODULE: ${{ steps.resolve.outputs.module }}
+        run: |
+          SRC="development/AppModules/$MODULE"
+          DEST="deferred/AppModules/$MODULE"
+          if [ ! -d "$SRC" ]; then
+            echo "::error::$SRC not found on deferred/snapshot after merge; nothing to defer."
+            exit 1
+          fi
+          if [ -e "$DEST" ]; then
+            echo "::error::$DEST already exists on deferred/snapshot; refusing to overwrite."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p "$(dirname "$DEST")"
+          git mv "$SRC" "$DEST"
+          git commit -m "defer: move $MODULE into deferred/ [skip ci]"
+          git push origin deferred/snapshot
+          echo "Moved $MODULE into deferred/ on deferred/snapshot."
+
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GELS_SANDBOX_PAT }}
+
+      - name: Remove module from development/ on main
+        env:
+          MODULE: ${{ steps.resolve.outputs.module }}
+        run: |
+          SRC="development/AppModules/$MODULE"
+          if [ ! -d "$SRC" ]; then
+            echo "::warning::$SRC not found on main (already removed?); nothing to do."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -r "$SRC"
+          git commit -m "defer: remove $MODULE from development/ (deferred) [skip ci]"
+
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              echo "Removed $MODULE from development/ on main."
+              exit 0
+            fi
+            echo "::warning::Push attempt $attempt failed; rebasing on main and retrying."
+            git fetch origin main || true
+            git rebase origin/main || {
+              echo "::error::Rebase onto main failed; cannot complete deferral automatically."
+              break
+            }
+          done
+
+          echo "::error::Could not push the removal commit to 'main'. $MODULE is STILL" \
+               "present in development/ on main even though it has already moved into" \
+               "deferred/ on deferred/snapshot. Most likely GELS_SANDBOX_PAT is not on" \
+               "main's ruleset bypass list. Fix that, then re-run this job, or remove by" \
+               "hand with: git rm -r $SRC"
+          exit 1

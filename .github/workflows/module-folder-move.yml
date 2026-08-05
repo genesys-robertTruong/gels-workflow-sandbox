@@ -1,0 +1,118 @@
+name: Module Folder Promotion
+
+# Implements the final step of the GeLS new-module workflow: once a PR is
+# accepted (merged), move the module out of development/ into its graded home --
+# certified/ for the `iec62304` label, functional/ for the `functional` label.
+# Maintenance labels keep the module in place, so they are a no-op here.
+#
+# History is preserved via `git mv`. No CMakeLists edits are needed: the
+# certified/ and functional/ AppModules CMakeLists auto-discover module folders.
+#
+# IMPORTANT: this pushes a commit directly to the protected default branch, which
+# the built-in GITHUB_TOKEN is never allowed to do.
+#
+# SANDBOX VARIANT: production uses a GitHub App (actions/create-github-app-token)
+# for the bypass credential; this copy uses a plain PAT secret (GELS_SANDBOX_PAT)
+# instead, since standing up a second App for a throwaway test repo tests nothing
+# the org-repo App setup didn't already prove. Everything downstream of having a
+# valid bypass-capable token -- the retry/rebase logic, the resolve/move mechanics
+# -- is unchanged from production.
+#
+# Required repository secret:
+#   GELS_SANDBOX_PAT  - a PAT with repo scope, added to this ruleset's bypass list
+#
+# There is deliberately no fallback to GITHUB_TOKEN. The job fails loudly up front
+# if the secret is missing, rather than merging the PR and then silently failing
+# to promote -- which would strand the module in development/ on the default branch.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: module-move-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  move:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the sandbox PAT
+        env:
+          SANDBOX_PAT: ${{ secrets.GELS_SANDBOX_PAT }}
+        run: |
+          if [ -z "$SANDBOX_PAT" ]; then
+            echo "::error::GELS_SANDBOX_PAT is not set. This workflow pushes the promotion" \
+                 "commit directly to '${{ github.event.pull_request.base.ref }}', which" \
+                 "branch protection blocks for the built-in GITHUB_TOKEN. Add the secret" \
+                 "and put it on the ruleset bypass list, then re-run this job — the module" \
+                 "is still in development/ and has not been promoted."
+            exit 1
+          fi
+
+      - name: Checkout default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GELS_SANDBOX_PAT }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Resolve move
+        id: resolve
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: python .github/scripts/resolve_move.py "$HEAD_REF" "$LABELS"
+
+      - name: Move module folder
+        if: steps.resolve.outputs.move == 'true'
+        env:
+          SRC: ${{ steps.resolve.outputs.src }}
+          DEST: ${{ steps.resolve.outputs.dest }}
+          MODULE: ${{ steps.resolve.outputs.module }}
+          DEST_ROOT: ${{ steps.resolve.outputs.dest_root }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          if [ ! -d "$SRC" ]; then
+            echo "::warning::Source $SRC not found (already promoted?); nothing to do."
+            exit 0
+          fi
+          if [ -e "$DEST" ]; then
+            echo "::warning::Destination $DEST already exists; skipping move."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p "$(dirname "$DEST")"
+          git mv "$SRC" "$DEST"
+          git commit -m "promote: move $MODULE to $DEST_ROOT/ [skip ci]"
+
+          # Retry to survive another PR merging into $BASE_REF in the meantime.
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:$BASE_REF"; then
+              echo "Promoted $MODULE -> $DEST_ROOT/"
+              exit 0
+            fi
+            echo "::warning::Push attempt $attempt failed; rebasing on $BASE_REF and retrying."
+            git fetch origin "$BASE_REF" || true
+            git rebase "origin/$BASE_REF" || {
+              echo "::error::Rebase onto $BASE_REF failed; cannot promote automatically."
+              break
+            }
+          done
+
+          echo "::error::Could not push the promotion commit to '$BASE_REF'. $MODULE is" \
+               "STILL IN development/ and has NOT been promoted to $DEST_ROOT/." \
+               "Most likely GELS_SANDBOX_PAT is not on the '$BASE_REF' ruleset bypass" \
+               "list. Add it, then re-run this job — or promote by hand with:" \
+               "git mv $SRC $DEST"
+          exit 1

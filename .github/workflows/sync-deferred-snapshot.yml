@@ -1,0 +1,53 @@
+name: Sync Deferred Snapshot
+
+# Keeps deferred/snapshot's tree matching main's, plus the extra
+# deferred/AppModules/ folder that main never has. Deferring a module is a
+# plain PR straight from its existing development/<INDEX_NAME> branch, base
+# deferred/snapshot -- for that PR's diff to stay just the module's own
+# changes instead of ballooning with every change main has picked up since
+# the last sync, deferred/snapshot must already be a strict superset of
+# main's current tree before the PR is opened. See defer-module-cleanup.yml
+# for what happens once it's merged.
+#
+# deferred/snapshot is NOT a protected branch, so this needs no special App
+# token -- the default GITHUB_TOKEN can push to it directly.
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-deferred-snapshot
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout deferred/snapshot
+        uses: actions/checkout@v4
+        with:
+          ref: deferred/snapshot
+          fetch-depth: 0
+
+      - name: Merge main into deferred/snapshot
+        run: |
+          git fetch origin main
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if ! git merge --no-edit origin/main; then
+            echo "::error::Merging main into deferred/snapshot produced a conflict. This" \
+                 "should not happen -- main never has a deferred/ folder, so the two" \
+                 "trees should never overlap. Investigate and resolve by hand:" \
+                 "git checkout deferred/snapshot && git merge origin/main"
+            git merge --abort
+            exit 1
+          fi
+
+          git push origin deferred/snapshot

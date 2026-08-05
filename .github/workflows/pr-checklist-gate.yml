@@ -1,0 +1,180 @@
+name: PR Review Checklist
+
+# Hard gate for the GeLS review process. Reads the `<!-- gels-review-type: ... -->`
+# marker that each PR template carries, applies the matching label, and fails this
+# (required) check until every checkbox in the PR body is ticked.
+#
+# A PR that changes no files inside a module folder is not a module review, so it
+# passes without a checklist -- that is what lets workflow / script / docs PRs
+# merge. Touching any module folder re-arms the gate, and a review type that was
+# selected explicitly is always enforced.
+#
+# Make this a *required* check under:
+#   Settings -> Rules -> Rulesets -> <default-branch ruleset>
+#   -> Require status checks to pass -> add the check named "gate"
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, ready_for_review, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify review template and checklist
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) { core.info('No pull_request in payload; skipping.'); return; }
+
+            // The four review types and their labels.
+            const LABELS = {
+              'iec62304':               { color: '0e8a16', description: 'Full IEC 62304 development review' },
+              'functional':             { color: '1d76db', description: 'Functional (sanity) development review' },
+              'iec62304-maintenance':   { color: '5319e7', description: 'Full IEC 62304 maintenance review' },
+              'functional-maintenance': { color: 'b60205', description: 'Functional (sanity) maintenance review' },
+            };
+            const reviewLabels = Object.keys(LABELS);
+
+            const body = pr.body || '';
+            const markerMatch = body.match(/<!--\s*gels-review-type:\s*([a-z0-9-]+)\s*-->/i);
+            const type = markerMatch ? markerMatch[1].toLowerCase() : null;
+            const valid = type && reviewLabels.includes(type);
+
+            const { owner, repo } = context.repo;
+            const issue_number = pr.number;
+
+            // --- Sync labels to reflect the selected review type --------------
+            const currentReview = (pr.labels || [])
+              .map(l => l.name)
+              .filter(n => reviewLabels.includes(n));
+
+            async function ensureLabel(name) {
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name });
+              } catch (e) {
+                if (e.status === 404) {
+                  await github.rest.issues.createLabel({
+                    owner, repo, name,
+                    color: LABELS[name].color,
+                    description: LABELS[name].description,
+                  });
+                } else { throw e; }
+              }
+            }
+
+            // Remove any review labels that no longer apply.
+            for (const name of currentReview) {
+              if (name !== type) {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name })
+                  .catch(() => {});
+              }
+            }
+            // Add the right one.
+            if (valid && !currentReview.includes(type)) {
+              await ensureLabel(type);
+              await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [type] });
+            }
+
+            // --- Draft PRs: defer the gate ------------------------------------
+            if (pr.draft) {
+              core.info('PR is a draft; checklist gate deferred until "Ready for review".');
+              return;
+            }
+
+            // --- Which graded module folders does this PR touch? ---------------
+            // Only files inside a module folder count, so changes to the AppModules
+            // CMakeLists (or anything else alongside the modules) are infrastructure.
+            const MODULE_PATH_RE = /^(certified|functional|development)\/AppModules\/[^/]+\//;
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner, repo, pull_number: issue_number, per_page: 100,
+            });
+            const touched = new Set();
+            for (const f of files) {
+              const m = f.filename.match(MODULE_PATH_RE);
+              if (m) touched.add(m[1]);
+            }
+
+            // --- No module changed: not a module review, so not gated ---------
+            // Lets infrastructure / tooling / docs PRs through. Touching any module
+            // folder pulls the checklist straight back in, and a review type that was
+            // selected explicitly is still enforced below even with no module files.
+            if (touched.size === 0 && !valid) {
+              await core.summary
+                .addHeading('No module review required')
+                .addRaw('This PR changes no files inside a module folder under ' +
+                        '`certified/`, `functional/` or `development/` `AppModules/`, ' +
+                        'so no GeLS review checklist applies.')
+                .write();
+              core.info('No module folders touched and no review type selected; gate not applicable.');
+              return;
+            }
+
+            // --- No valid template selected -----------------------------------
+            if (!valid) {
+              core.setFailed(
+                'This PR changes module files under ' +
+                [...touched].map(r => `${r}/`).join(', ') +
+                ' but no review template was selected. Open it with one of the four ' +
+                'templates (see the "Select a review type" instructions) so the ' +
+                'right checklist and label are applied.');
+              return;
+            }
+
+            // --- Maintenance label must match the module's actual grade -------
+            // A module in functional/ cannot take an IEC 62304 maintenance review
+            // (and vice versa): re-grading goes through a promotion/* branch, not
+            // a maintenance PR.
+            const GRADE_FOR_TYPE = {
+              'iec62304-maintenance':   'certified',
+              'functional-maintenance': 'functional',
+            };
+            const expectedGrade = GRADE_FOR_TYPE[type];
+
+            if (expectedGrade) {
+              const wrongGrade = [...touched].filter(
+                root => root !== expectedGrade && root !== 'development');
+
+              if (wrongGrade.length) {
+                core.setFailed(
+                  `Review type "${type}" expects a module in \`${expectedGrade}/\`, but this ` +
+                  `PR changes files under ${wrongGrade.map(r => `\`${r}/\``).join(', ')}. ` +
+                  `Use the ${wrongGrade.includes('certified') ? '`iec62304_maintenance.md`' : '`functional_maintenance.md`'} ` +
+                  `template instead — or, to re-grade a functional module for IEC 62304, ` +
+                  `push a \`promotion/<INDEX_NAME>\` branch and use the \`iec62304.md\` template.`);
+                return;
+              }
+
+              if (!touched.has(expectedGrade)) {
+                core.warning(
+                  `Review type "${type}" selected but no files under \`${expectedGrade}/AppModules/\` ` +
+                  `were changed. Check the right module is in this PR.`);
+              }
+            }
+
+            // --- Count checkboxes ---------------------------------------------
+            const unchecked = (body.match(/^[ \t]*[-*] \[ \]/gm) || []).length;
+            const checked   = (body.match(/^[ \t]*[-*] \[[xX]\]/gm) || []).length;
+            const total = unchecked + checked;
+
+            await core.summary
+              .addHeading(`Review type: ${type}`)
+              .addRaw(`Checklist: **${checked}/${total}** items complete.`)
+              .write();
+
+            if (total === 0) {
+              core.setFailed(`Review type "${type}" selected but no checklist items were found in the PR body.`);
+              return;
+            }
+            if (unchecked > 0) {
+              core.setFailed(`Checklist incomplete: ${unchecked} of ${total} item(s) still unticked for review type "${type}".`);
+              return;
+            }
+            core.info(`All ${total} checklist items complete for review type "${type}".`);

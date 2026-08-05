@@ -1,0 +1,77 @@
+name: New Module Scaffold
+
+# Implements the "New module" path of the GeLS module workflow:
+# pushing a branch named  development/<INDEX_NAME>  (e.g.
+# development/PM_02_47_MOTOR_DRIVER_BTM9011EP) makes this action create the module
+# under development/AppModules/ from the template/ folder, register it in
+# AppModules.h/.c, and commit the result back onto the same branch.
+#
+# This is also how a deferred module resumes development: if <INDEX_NAME>
+# already exists under deferred/AppModules/ on the deferred/snapshot branch,
+# restore_from_deferred.py moves those files into development/AppModules/
+# instead of scaffolding blank ones from template/, and the module is then
+# removed from deferred/snapshot to complete the move.
+
+on:
+  push:
+    branches:
+      - 'development/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  # Never run two scaffolds for the same branch at once.
+  group: new-module-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  scaffold:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout development branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Restore from deferred/snapshot, if previously deferred
+        id: restore
+        run: python .github/scripts/restore_from_deferred.py "${{ github.ref_name }}"
+
+      - name: Scaffold module from template
+        id: scaffold
+        run: python .github/scripts/scaffold_module.py "${{ github.ref_name }}"
+
+      - name: Commit & push generated module
+        if: steps.scaffold.outputs.changed == 'true' || steps.restore.outputs.restored == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          MODULE="${{ steps.scaffold.outputs.module || steps.restore.outputs.module }}"
+          if [ "${{ steps.restore.outputs.restored }}" = "true" ]; then
+            git commit -m "resume: restore module $MODULE from deferred/ [skip ci]"
+          else
+            git commit -m "scaffold: add module $MODULE [skip ci]"
+          fi
+          git push origin "HEAD:${{ github.ref_name }}"
+
+      - name: Remove module from deferred/snapshot
+        if: steps.restore.outputs.restored == 'true'
+        env:
+          MODULE: ${{ steps.restore.outputs.module }}
+        run: |
+          git checkout -B deferred/snapshot origin/deferred/snapshot
+          git rm -r "deferred/AppModules/$MODULE"
+          git commit -m "resume: remove $MODULE from deferred (moved to development/) [skip ci]"
+          git push origin deferred/snapshot
