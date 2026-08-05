@@ -23,11 +23,12 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+          token: ${{ secrets.GELS_SANDBOX_PAT }}
       - run: |
           git checkout -b "${{ inputs.branch_name }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          echo "diagnostic content" > diag-token-push.txt
-          git add diag-token-push.txt
-          git commit -m "diagnostic: pushed via GITHUB_TOKEN"
+          echo "diagnostic content (PAT push)" > diag-pat-push.txt
+          git add diag-pat-push.txt
+          git commit -m "diagnostic: pushed via GELS_SANDBOX_PAT"
           git push origin "${{ inputs.branch_name }}"
