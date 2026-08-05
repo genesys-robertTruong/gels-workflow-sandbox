@@ -2,16 +2,18 @@
 """Scaffold a new GeLS AppModule from the template/ folder.
 
 Driven by the "New Module" GitHub Action. Given the development branch name
-(e.g. ``development/PM_02_47_MOTOR_DRIVER_BTM9011EP``) this:
+(e.g. ``development/PM_02_47_MOTOR_DRIVER_BTM9011EP``) this derives the module
+names (index name, number, snake, PascalCase, etc.) and copies ``template/``
+-> ``development/AppModules/<PascalName>/`` with the files renamed and the
+placeholders substituted.
 
-  1. Derives the module names (index name, number, snake, PascalCase, etc.).
-  2. Copies ``template/`` -> ``development/AppModules/<PascalName>/`` with the
-     files renamed and the placeholders substituted.
-  3. Registers the module in ``AppModules.h`` / ``AppModules.c`` (index
-     ``#define``, ``NUMBER_OF_MODULES`` bump and string-lookup entries).
+This module also holds the shared name-derivation and AppModules.h/.c editing
+logic (register_header/register_source) used by register_module.py, which
+registers the module directly on main -- see that script for why registration
+is handled separately from this one.
 
-The script is idempotent: each of the two steps is skipped if it has already
-been done, so re-running it (or a second push) is a no-op.
+File scaffolding is idempotent: it is skipped if the destination folder
+already exists, so re-running this (or a second push) is a no-op.
 
 Usage:
     python scaffold_module.py <branch-name>
@@ -291,14 +293,7 @@ def main():
     print(f"Pascal     : {names['__MODULE_PASCAL__']}")
     print(f"Doxy group : {names['__MODULE_GROUP__']}")
 
-    files_created = scaffold_files(names)
-    header_changed, new_index = register_header(names)
-    if new_index is None:
-        # Header already had the macro; recover its index for the .c registration.
-        new_index = _existing_index(names)
-    source_changed = register_source(names, new_index) if new_index is not None else False
-
-    changed = files_created or header_changed or source_changed
+    changed = scaffold_files(names)
     set_output(
         changed=str(changed).lower(),
         module=names["__MODULE_PASCAL__"],

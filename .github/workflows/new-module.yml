@@ -1,16 +1,29 @@
 name: New Module Scaffold
 
-# Implements the "New module" path of the GeLS module workflow:
-# pushing a branch named  development/<INDEX_NAME>  (e.g.
-# development/PM_02_47_MOTOR_DRIVER_BTM9011EP) makes this action create the module
-# under development/AppModules/ from the template/ folder, register it in
-# AppModules.h/.c, and commit the result back onto the same branch.
+# Implements the "New module" path of the GeLS module workflow: pushing a
+# branch named  development/<INDEX_NAME>  (e.g.
+# development/PM_02_47_MOTOR_DRIVER_BTM9011EP) makes this action:
+#
+#   1. Scaffold the module under development/AppModules/ from template/ and
+#      commit it onto that same branch.
+#   2. Register the module directly on main (see register_module.py for why
+#      that happens immediately, on main, rather than waiting for a future
+#      PR), then sync that registration back onto the development branch so
+#      it stays buildable.
 #
 # This is also how a deferred module resumes development: if <INDEX_NAME>
 # already exists under deferred/AppModules/ on the deferred/snapshot branch,
 # restore_from_deferred.py moves those files into development/AppModules/
 # instead of scaffolding blank ones from template/, and the module is then
-# removed from deferred/snapshot to complete the move.
+# removed from deferred/snapshot to complete the move. Its registration on
+# main was never removed by deferring, so the register step below is always
+# a no-op in that case.
+#
+# IMPORTANT: registering on main pushes a commit directly to the protected
+# default branch, which the built-in GITHUB_TOKEN is never allowed to do.
+#
+# SANDBOX VARIANT: uses the GELS_SANDBOX_PAT secret instead of a GitHub App --
+# see module-folder-move.yml for why.
 
 on:
   push:
@@ -44,11 +57,11 @@ jobs:
         id: restore
         run: python .github/scripts/restore_from_deferred.py "${{ github.ref_name }}"
 
-      - name: Scaffold module from template
+      - name: Scaffold module files from template
         id: scaffold
         run: python .github/scripts/scaffold_module.py "${{ github.ref_name }}"
 
-      - name: Commit & push generated module
+      - name: Commit & push generated module files
         if: steps.scaffold.outputs.changed == 'true' || steps.restore.outputs.restored == 'true'
         run: |
           git config user.name "github-actions[bot]"
@@ -62,7 +75,7 @@ jobs:
           if [ "${{ steps.restore.outputs.restored }}" = "true" ]; then
             git commit -m "resume: restore module $MODULE from deferred/ [skip ci]"
           else
-            git commit -m "scaffold: add module $MODULE [skip ci]"
+            git commit -m "scaffold: add module $MODULE files [skip ci]"
           fi
           git push origin "HEAD:${{ github.ref_name }}"
 
@@ -75,3 +88,78 @@ jobs:
           git rm -r "deferred/AppModules/$MODULE"
           git commit -m "resume: remove $MODULE from deferred (moved to development/) [skip ci]"
           git push origin deferred/snapshot
+
+      - name: Require the sandbox PAT
+        env:
+          SANDBOX_PAT: ${{ secrets.GELS_SANDBOX_PAT }}
+        run: |
+          if [ -z "$SANDBOX_PAT" ]; then
+            echo "::error::GELS_SANDBOX_PAT is not set. This workflow registers the module" \
+                 "directly on main, which requires pushing to that protected branch. Add" \
+                 "the secret and put it on the ruleset bypass list, then re-run this job --" \
+                 "the module's files are on this branch but it is not yet registered."
+            exit 1
+          fi
+
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GELS_SANDBOX_PAT }}
+
+      - name: Set up Python (main checkout)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Register module on main
+        id: register
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          for attempt in 1 2 3 4 5; do
+            python .github/scripts/register_module.py "$BRANCH"
+            git add -A
+            if git diff --cached --quiet; then
+              echo "Already registered on main; nothing to push."
+              break
+            fi
+            git commit -m "register: add module to AppModules.h/.c [skip ci]"
+            if git push origin HEAD:main; then
+              echo "Registered on main."
+              break
+            fi
+            if [ "$attempt" = "5" ]; then
+              echo "::error::Could not register on main after 5 attempts. The module's" \
+                   "files are on the development branch but it is NOT YET registered in" \
+                   "AppModules.h/.c. Most likely GELS_SANDBOX_PAT is not on main's ruleset" \
+                   "bypass list, or there is heavy concurrent scaffold activity. Fix and" \
+                   "re-run this job."
+              exit 1
+            fi
+            echo "::warning::Push attempt $attempt failed (concurrent registration?);" \
+                 "refetching main and recomputing the index."
+            git reset --hard HEAD~1
+            git fetch origin main
+            git reset --hard origin/main
+          done
+
+      - name: Sync main's registration back onto the development branch
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          git checkout -B "$BRANCH" "origin/$BRANCH"
+          git checkout main -- exempt/AppModules/AppModules/AppModules.h exempt/AppModules/AppModules/AppModules.c
+          git add exempt/AppModules/AppModules/AppModules.h exempt/AppModules/AppModules/AppModules.c
+          if git diff --cached --quiet; then
+            echo "Development branch already matches main's registration."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "register: sync AppModules.h/.c from main [skip ci]"
+          git push origin "HEAD:$BRANCH"
