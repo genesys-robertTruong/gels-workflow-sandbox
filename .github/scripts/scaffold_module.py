@@ -130,6 +130,20 @@ def scaffold_files(names):
         print(f"Module folder already exists: {dest_root} (skipping file scaffold).")
         return False
 
+    # Safety guard for the unified development/<INDEX_NAME> entry point: never
+    # blank-scaffold over a module that already lives in a graded home. A
+    # functional/ module is re-graded into development/ by
+    # regrade_from_functional.py before this runs (so dest_root would exist and
+    # we'd have returned above); reaching here with a graded copy present means
+    # the wrong branch was pushed. certified/ is terminal -- changes to a
+    # released module go through a maintenance/ branch, not development/.
+    for graded in ("certified", "functional"):
+        if os.path.isdir(os.path.join(graded, "AppModules", pascal)):
+            fail(f"Module '{pascal}' already exists in {graded}/AppModules. A "
+                 f"development/ push scaffolds new modules or resumes/re-grades "
+                 f"existing ones -- it will not overwrite a released module. For a "
+                 f"change to a released module, use a maintenance/ branch instead.")
+
     if not os.path.isdir(TEMPLATE_DIR):
         fail(f"Template folder not found: {TEMPLATE_DIR}")
 

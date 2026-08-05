@@ -11,13 +11,19 @@ name: New Module Scaffold
 #      PR), then sync that registration back onto the development branch so
 #      it stays buildable.
 #
-# This is also how a deferred module resumes development: if <INDEX_NAME>
-# already exists under deferred/AppModules/ on the deferred/snapshot branch,
-# restore_from_deferred.py moves those files into development/AppModules/
-# instead of scaffolding blank ones from template/, and the module is then
-# removed from deferred/snapshot to complete the move. Its registration on
-# main was never removed by deferring, so the register step below is always
-# a no-op in that case.
+# A push to development/<INDEX_NAME> is the single entry point for getting a
+# module into development, whatever its current state -- the source is inferred:
+#
+#   * deferred/AppModules/ on deferred/snapshot -> restore_from_deferred.py
+#     moves it back and clears the deferred copy (resume a parked module).
+#   * functional/AppModules/ (inherited from main) -> regrade_from_functional.py
+#     git-moves it into development/ for a full IEC 62304 re-grade. This
+#     replaces the old promotion/<INDEX_NAME> branch + module-promotion.yml.
+#   * nowhere yet -> scaffold_module.py creates it from template/.
+#
+# A module is only ever in one of those states, so the choice is unambiguous.
+# In the resume and re-grade cases the module is already registered on main, so
+# the register step below is a no-op.
 #
 # IMPORTANT: registering on main pushes a commit directly to the protected
 # default branch, which the built-in GITHUB_TOKEN is never allowed to do.
@@ -66,12 +72,19 @@ jobs:
         id: restore
         run: python .github/scripts/restore_from_deferred.py "${{ github.ref_name }}"
 
+      - name: Re-grade from functional/, if applicable
+        id: regrade
+        run: python .github/scripts/regrade_from_functional.py "${{ github.ref_name }}"
+
       - name: Scaffold module files from template
         id: scaffold
         run: python .github/scripts/scaffold_module.py "${{ github.ref_name }}"
 
       - name: Commit & push generated module files
-        if: steps.scaffold.outputs.changed == 'true' || steps.restore.outputs.restored == 'true'
+        if: >
+          steps.scaffold.outputs.changed == 'true' ||
+          steps.restore.outputs.restored == 'true' ||
+          steps.regrade.outputs.regraded == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -80,9 +93,11 @@ jobs:
             echo "No changes to commit."
             exit 0
           fi
-          MODULE="${{ steps.scaffold.outputs.module || steps.restore.outputs.module }}"
+          MODULE="${{ steps.scaffold.outputs.module || steps.restore.outputs.module || steps.regrade.outputs.module }}"
           if [ "${{ steps.restore.outputs.restored }}" = "true" ]; then
             git commit -m "resume: restore module $MODULE from deferred/"
+          elif [ "${{ steps.regrade.outputs.regraded }}" = "true" ]; then
+            git commit -m "regrade: move module $MODULE from functional/ to development/"
           else
             git commit -m "scaffold: add module $MODULE files"
           fi
