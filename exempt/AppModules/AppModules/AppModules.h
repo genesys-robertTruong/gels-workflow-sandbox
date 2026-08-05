@@ -11,12 +11,7 @@
 
 #define APP_MODULES__RESERVED_MODULE                                       0U
 
-#define APP_MODULES__PM_99_96_TEST_MODULE_DELTA_INDEX                      1U
-#define APP_MODULES__PM_99_95_TEST_MODULE_ECHO_INDEX                       2U
-#define APP_MODULES__PM_99_92_TEST_MODULE_HOTEL_INDEX                      3U
-#define APP_MODULES__PM_99_91_TEST_MODULE_INDIA_INDEX                      4U
-#define APP_MODULES__PM_99_90_TEST_MODULE_JULIET_INDEX                     5U
-#define APP_MODULES__NUMBER_OF_MODULES                                     6U
+#define APP_MODULES__NUMBER_OF_MODULES                                     1U
 
 extern const char8_t* const AppModules__ModuleStringLookup_gro[APP_MODULES__NUMBER_OF_MODULES];
 
