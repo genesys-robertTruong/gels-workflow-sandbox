@@ -1,0 +1,78 @@
+/**
+****************************************************************************************************
+@defgroup   PM_99_92_TestModuleHotel PM_99_92_TestModuleHotel
+@brief      Genesys TestModuleHotel Gels Module
+@author     Genesys Electronics Design Team
+@ingroup    GELS
+****************************************************************************************************
+@version   V0.0.1
+@date      05-Aug-2026
+****************************************************************************************************
+@verbatim
+  **************************************************************************************************
+   Copyright (c) 2026, Genesys Electronics Design Pty Ltd
+   All Rights Reserved
+   Unit 5/33 Ryde Road
+   Pymble NSW 2073
+   Australia
+   Telephone # +61-2-9496 8900
+
+   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR
+   IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+   CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+   DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+   DATA, OR PROFITS OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+   IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
+   OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+  **************************************************************************************************
+    Revision Number     : 0.0.1
+    Revision By         : <Author>
+    Date                : 05-Aug-2026
+    Misra-C Checked By  : To be reviewed
+    Reviewed By         : To be reviewed
+    Approval Status     : New
+    Description         : Initial Release
+  **************************************************************************************************
+@endverbatim
+
+@details
+Module Summary
+====================================================================================================
+
+A brief description of the module and its implementation is placed here.
+
+This should summarise at a high level what the module does, why it does what it does and any key
+points that require the user to be aware of. This should essentially capture the requirements of the
+module at a high level.
+
+It may also include examples of the architecture of the module (e.g. if it a function routes
+messages to another module).
+
+
+How To Use
+====================================================================================================
+
+This section should include a summary of how to configure the module structures, as well as how to
+use the module APIs. The more detail the better. Any information on the module's architecture
+or important information on how the module works can be included here.
+
+Config Files set up
+--------------------------------------------------------------------------------
+Describe how the per-instance config structures in TestModuleHotelConfig.h/.c should be populated.
+
+@code{.c}
+// Example configuration goes here.
+@endcode
+
+
+TestModuleHotel__Init and TestModuleHotel__Deinit
+--------------------------------------------------------------------------------
+Describe how to initialise and deinitialise the module.
+
+@code{.c}
+// Example usage goes here.
+@endcode
+
+*/
