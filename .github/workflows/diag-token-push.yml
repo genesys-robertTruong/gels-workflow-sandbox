@@ -1,0 +1,33 @@
+name: Diagnostic Token Push
+
+# Throwaway diagnostic: pushes a trivial commit to a new branch using the
+# default GITHUB_TOKEN, to test whether a branch touched by that identity
+# behaves differently for pull_request event dispatch than a branch touched
+# only by a human. Delete once the investigation is done.
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch_name:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - run: |
+          git checkout -b "${{ inputs.branch_name }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          echo "diagnostic content" > diag-token-push.txt
+          git add diag-token-push.txt
+          git commit -m "diagnostic: pushed via GITHUB_TOKEN"
+          git push origin "${{ inputs.branch_name }}"
