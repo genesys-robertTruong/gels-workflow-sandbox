@@ -13,7 +13,8 @@
 
 #define APP_MODULES__PM_99_96_TEST_MODULE_DELTA_INDEX                      1U
 #define APP_MODULES__PM_99_95_TEST_MODULE_ECHO_INDEX                       2U
-#define APP_MODULES__NUMBER_OF_MODULES                                     3U
+#define APP_MODULES__PM_99_94_TEST_MODULE_FOXTROT_INDEX                    3U
+#define APP_MODULES__NUMBER_OF_MODULES                                     4U
 
 extern const char8_t* const AppModules__ModuleStringLookup_gro[APP_MODULES__NUMBER_OF_MODULES];
 
