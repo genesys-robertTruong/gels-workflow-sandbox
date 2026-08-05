@@ -12,7 +12,8 @@
 #define APP_MODULES__RESERVED_MODULE                                       0U
 
 #define APP_MODULES__PM_99_50_TEST_MODULE_KILO_INDEX                       1U
-#define APP_MODULES__NUMBER_OF_MODULES                                     2U
+#define APP_MODULES__PM_99_51_TEST_MODULE_LIMA_INDEX                       2U
+#define APP_MODULES__NUMBER_OF_MODULES                                     3U
 
 extern const char8_t* const AppModules__ModuleStringLookup_gro[APP_MODULES__NUMBER_OF_MODULES];
 
