@@ -11,7 +11,8 @@
 
 #define APP_MODULES__RESERVED_MODULE                                       0U
 
-#define APP_MODULES__NUMBER_OF_MODULES                                     1U
+#define APP_MODULES__PM_99_99_TEST_MODULE_ALPHA_INDEX                      1U
+#define APP_MODULES__NUMBER_OF_MODULES                                     2U
 
 extern const char8_t* const AppModules__ModuleStringLookup_gro[APP_MODULES__NUMBER_OF_MODULES];
 
