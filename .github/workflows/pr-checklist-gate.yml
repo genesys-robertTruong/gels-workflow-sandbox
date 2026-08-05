@@ -140,8 +140,8 @@ jobs:
 
             // --- Maintenance label must match the module's actual grade -------
             // A module in functional/ cannot take an IEC 62304 maintenance review
-            // (and vice versa): re-grading goes through a promotion/* branch, not
-            // a maintenance PR.
+            // (and vice versa): re-grading a functional module up to IEC 62304
+            // goes through a development/* re-grade, not a maintenance PR.
             const GRADE_FOR_TYPE = {
               'iec62304-maintenance':   'certified',
               'functional-maintenance': 'functional',
@@ -157,8 +157,9 @@ jobs:
                   `Review type "${type}" expects a module in \`${expectedGrade}/\`, but this ` +
                   `PR changes files under ${wrongGrade.map(r => `\`${r}/\``).join(', ')}. ` +
                   `Use the ${wrongGrade.includes('certified') ? '`iec62304_maintenance.md`' : '`functional_maintenance.md`'} ` +
-                  `template instead — or, to re-grade a functional module for IEC 62304, ` +
-                  `push a \`promotion/<INDEX_NAME>\` branch and use the \`iec62304.md\` template.`);
+                  `template instead — or, to re-grade a functional module up to IEC 62304, ` +
+                  `push a \`development/<INDEX_NAME>\` branch (which moves it back into ` +
+                  `development/) and open the review with the \`iec62304.md\` template.`);
                 return;
               }
 

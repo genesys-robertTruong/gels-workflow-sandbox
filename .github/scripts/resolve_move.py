@@ -21,10 +21,11 @@ import sys
 # Reuse the exact naming logic the scaffolder uses.
 from scaffold_module import derive_pascal, NUMBER_PREFIX_RE
 
-# Branch prefixes whose modules live in development/ pending promotion:
-#   development/  - a brand new module
-#   promotion/    - a functional module being re-graded for IEC 62304
-DEV_PREFIXES = ("development/", "promotion/")
+# A promotable module lives in development/ on a development/<INDEX_NAME>
+# branch -- whether it was newly scaffolded, resumed from deferred, or
+# re-graded up from functional/ (all three share the development/ prefix; see
+# new-module.yml).
+DEV_PREFIXES = ("development/",)
 
 # Review label -> destination top-level folder.
 LABEL_DEST = {
