@@ -13,11 +13,13 @@ const char8_t *const AppModules__ModuleStringLookup_gro[APP_MODULES__NUMBER_OF_M
    "PM_99_50_TEST_MODULE_KILO",                      // 1
    "PM_99_51_TEST_MODULE_LIMA",                      // 2
    "PM_99_52_TEST_MODULE_MIKE",                      // 3
+   "PM_99_53_TEST_MODULE_NOVEMBER",                  // 4
 #else
    "0",
    "1",
    "2",
    "3",
+   "4",
 #endif // APPMODULES_CONFIG__COMPILE_MODULE_NAMES
 };
 #endif // APP_MODULES_CONFIG__ENABLE_AM_01_01_APPMODULES
